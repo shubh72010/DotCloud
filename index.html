@@ -3,37 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DotCloud</title>
+  <title>DotCloud - AI Anywhere</title>
   <link rel="stylesheet" href="style.css">
-  <style>
-    body { font-family: Arial, sans-serif; background: #1e1e2f; color: #eee; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0;}
-    .container { max-width: 600px; width: 100%; text-align:center; }
-    input, select, button { padding: 10px; margin: 5px 0; width: 100%; border-radius:6px; border:none; }
-    input { background:#2e2e44; color:#eee; }
-    button { background:#6c63ff; color:white; cursor:pointer; font-weight:bold; }
-    button:hover { background:#574fd6; }
-    .chat-box { border:1px solid #444; border-radius:6px; padding:10px; margin-top:15px; height:250px; overflow-y:auto; background:#2e2e44; }
-    .message { margin-bottom:10px; }
-    .tos-link { margin-top:20px; font-size:14px; color:#aaa; cursor:pointer; }
-  </style>
 </head>
 <body>
-  <div class="container">
+  <header>
     <h1>DotCloud</h1>
-    <p>Run AI models anywhere, anytime. Session-only API keys.</p>
+    <p>Run AI models anywhere, anytime.</p>
+    <a href="tos.html" target="_blank">Terms of Service</a>
+  </header>
 
-    <input type="text" id="apiKey" placeholder="Enter your OpenRouter API Key">
-    <select id="model">
-      <option value="gpt-neo-1.3B">GPT-Neo 1.3B</option>
-      <option value="gpt-j-6B">GPT-J 6B</option>
-    </select>
-    <textarea id="userInput" rows="3" placeholder="Enter your prompt here"></textarea>
-    <button id="runBtn">Run AI</button>
-
-    <div class="chat-box" id="chatBox"></div>
-
-    <div class="tos-link" onclick="window.location.href='tos.html'">View Terms of Service</div>
-  </div>
+  <main>
+    <div id="chat-container">
+      <div id="chat-messages"></div>
+      <div id="typing-indicator" style="display:none;">DotCloud is typing...</div>
+      <input type="text" id="prompt" placeholder="Enter your prompt..." autocomplete="off"/>
+      <input type="text" id="api-key" placeholder="Your OpenRouter API key" autocomplete="off"/>
+      <select id="model">
+        <option value="model-1">Model 1</option>
+        <option value="model-2">Model 2</option>
+      </select>
+      <button id="send-btn">Send</button>
+    </div>
+  </main>
 
   <script src="app.js"></script>
 </body>
