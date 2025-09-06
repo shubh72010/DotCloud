@@ -1,8 +1,14 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import requests
 
 app = Flask(__name__)
 
+# Serve index page
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# Generate AI response
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.json
@@ -11,11 +17,14 @@ def generate():
     model = data.get('model') or "meta-llama/llama-3.3-8b-instruct:free"
 
     if not prompt or not api_key:
-        return jsonify({"error": "Missing prompt or API key"}), 400
+        return jsonify({"error": "Missing prompt, API key, or model"}), 400
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        # Optional for app recognition on OpenRouter
+        "HTTP-Referer": request.host_url,
+        "X-Title": "DotCloud AI"
     }
 
     payload = {
@@ -23,16 +32,18 @@ def generate():
         "messages": [{"role": "user", "content": prompt}]
     }
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-
     try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        response.raise_for_status()
         return jsonify(response.json())
-    except Exception:
-        return jsonify({"error": "Invalid response from OpenRouter"}), 500
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Use 0.0.0.0 for Render deployment
+    app.run(host='0.0.0.0', port=5000, debug=True)
