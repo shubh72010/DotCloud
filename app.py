@@ -1,49 +1,40 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, send_from_directory
 import requests
+import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
-# Serve index page
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return send_from_directory('static', 'index.html')
 
-# Generate AI response
 @app.route('/generate', methods=['POST'])
 def generate():
-    data = request.json
+    data = request.get_json()
     prompt = data.get('prompt')
+    model = data.get('model')
     api_key = data.get('apiKey')
-    model = data.get('model') or "meta-llama/llama-3.3-8b-instruct:free"
 
-    if not prompt or not api_key:
-        return jsonify({"error": "Missing prompt, API key, or model"}), 400
+    if not prompt or not model or not api_key:
+        return jsonify({"error": "Missing prompt, model, or API key"}), 400
 
+    url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        # Optional for app recognition on OpenRouter
-        "HTTP-Referer": request.host_url,
-        "X-Title": "DotCloud AI"
+        "Content-Type": "application/json"
     }
-
-    payload = {
+    body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}]
     }
 
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        response.raise_for_status()
-        return jsonify(response.json())
+        resp = requests.post(url, headers=headers, json=body, timeout=30)
+        resp.raise_for_status()
+        return jsonify(resp.json())
     except requests.exceptions.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    # Use 0.0.0.0 for Render deployment
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
