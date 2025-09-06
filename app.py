@@ -1,6 +1,5 @@
-from flask import Flask, request, Response, render_template_string
+from flask import Flask, request, render_template_string, jsonify
 import requests
-import json
 import os
 
 app = Flask(__name__)
@@ -11,49 +10,64 @@ HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DotCloud AI</title>
+<title>DotCloud AI Chat</title>
 <style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-input, textarea { width: 100%; margin: 5px 0; padding: 8px; }
-button { padding: 10px 20px; margin: 5px 0; cursor: pointer; }
-pre { background: #f4f4f4; padding: 10px; white-space: pre-wrap; }
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f0f0; }
+#chat-container { max-width: 600px; margin: 50px auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+#messages { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+.message { margin: 5px 0; }
+.user { text-align: right; color: white; background: #4a90e2; padding: 5px 10px; border-radius: 5px; display: inline-block; }
+.ai { text-align: left; color: black; background: #eee; padding: 5px 10px; border-radius: 5px; display: inline-block; }
+input, button { padding: 10px; margin: 5px 0; width: 100%; }
 </style>
 </head>
 <body>
-<h1>DotCloud AI</h1>
-<input type="text" id="apiKey" placeholder="Enter your OpenRouter API key">
-<input type="text" id="model" placeholder="Enter model (e.g., meta-llama/llama-3.3-8b-instruct:free)">
-<textarea id="prompt" placeholder="Enter your prompt..."></textarea>
-<button id="sendBtn">Send</button>
-
-<h3>Response:</h3>
-<pre id="response"></pre>
+<div id="chat-container">
+    <h2>DotCloud AI Chat</h2>
+    <input type="text" id="apiKey" placeholder="Enter your OpenRouter API key">
+    <input type="text" id="model" placeholder="Enter model (e.g., meta-llama/llama-3.3-8b-instruct:free)">
+    <div id="messages"></div>
+    <input type="text" id="prompt" placeholder="Enter your message...">
+    <button id="sendBtn">Send</button>
+</div>
 
 <script>
-const sendBtn = document.getElementById('sendBtn');
-const responseBox = document.getElementById('response');
+let messages = [];
 
-sendBtn.addEventListener('click', () => {
+function renderMessages() {
+    const container = document.getElementById('messages');
+    container.innerHTML = '';
+    messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = 'message ' + (msg.role === 'user' ? 'user' : 'ai');
+        div.textContent = msg.content;
+        container.appendChild(div);
+    });
+    container.scrollTop = container.scrollHeight;
+}
+
+document.getElementById('sendBtn').addEventListener('click', async () => {
     const prompt = document.getElementById('prompt').value;
     const model = document.getElementById('model').value;
     const apiKey = document.getElementById('apiKey').value;
 
     if (!prompt || !model || !apiKey) {
-        alert('Please fill in all fields!');
+        alert('Fill all fields!');
         return;
     }
 
-    responseBox.textContent = "";
-    const eventSource = new EventSource(`/stream?prompt=${encodeURIComponent(prompt)}&model=${encodeURIComponent(model)}&apiKey=${encodeURIComponent(apiKey)}`);
+    messages.push({role: 'user', content: prompt});
+    renderMessages();
 
-    eventSource.onmessage = (e) => {
-        responseBox.textContent += e.data;
-    };
-
-    eventSource.onerror = (e) => {
-        responseBox.textContent += "\\n[Error streaming response]";
-        eventSource.close();
-    };
+    const res = await fetch('/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt, model, apiKey, history: messages})
+    });
+    const data = await res.json();
+    messages.push({role: 'ai', content: data.response});
+    renderMessages();
+    document.getElementById('prompt').value = '';
 });
 </script>
 </body>
@@ -64,44 +78,31 @@ sendBtn.addEventListener('click', () => {
 def index():
     return render_template_string(HTML)
 
-@app.route('/stream')
-def stream():
-    prompt = request.args.get("prompt")
-    model = request.args.get("model")
-    api_key = request.args.get("apiKey")
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    prompt = data.get('prompt')
+    model = data.get('model')
+    api_key = data.get('apiKey')
+    history = data.get('history', [])
 
     if not prompt or not model or not api_key:
-        return "Missing parameters", 400
+        return jsonify({'response': 'Missing parameters'}), 400
+
+    messages_payload = [{'role': m['role'], 'content': m['content']} for m in history]
 
     url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": True
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    body = {"model": model, "messages": messages_payload}
 
-    def event_stream():
-        with requests.post(url, headers=headers, json=body, stream=True, timeout=60) as r:
-            for line in r.iter_lines():
-                if line:
-                    try:
-                        decoded = line.decode('utf-8')
-                        if decoded.startswith("data: "):
-                            decoded = decoded[6:]
-                        if decoded == "[DONE]":
-                            break
-                        obj = json.loads(decoded)
-                        content = obj.get("choices", [{}])[0].get("delta", {}).get("content")
-                        if content:
-                            yield f"data: {content}\n\n"
-                    except Exception:
-                        continue
-
-    return Response(event_stream(), mimetype="text/event-stream")
+    try:
+        r = requests.post(url, headers=headers, json=body, timeout=30)
+        r.raise_for_status()
+        response_json = r.json()
+        ai_content = response_json['choices'][0]['message']['content']
+        return jsonify({'response': ai_content})
+    except Exception as e:
+        return jsonify({'response': f'Error: {str(e)}'})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
