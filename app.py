@@ -1,34 +1,38 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import requests
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return render_template("index.html")
-
-@app.route("/tos")
-def tos():
-    return render_template("tos.html")
-
-@app.route("/api/run", methods=["POST"])
-def run_ai():
+@app.route('/generate', methods=['POST'])
+def generate():
     data = request.json
-    api_key = data.get("apiKey")
-    model = data.get("model")
-    prompt = data.get("prompt")
+    prompt = data.get('prompt')
+    api_key = data.get('apiKey')
+    model = data.get('model') or "meta-llama/llama-3.3-8b-instruct:free"
 
-    if not api_key or not model or not prompt:
-        return jsonify({"error":"Missing fields"}),400
+    if not prompt or not api_key:
+        return jsonify({"error": "Missing prompt or API key"}), 400
 
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"input": prompt}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload
+    )
 
     try:
-        response = requests.post(f"https://openrouter.ai/api/v1/{model}/generate", headers=headers, json=payload)
         return jsonify(response.json())
-    except Exception as e:
-        return jsonify({"error": str(e)}),500
+    except Exception:
+        return jsonify({"error": "Invalid response from OpenRouter"}), 500
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    app.run(debug=True)
