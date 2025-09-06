@@ -1,41 +1,46 @@
-const runBtn = document.getElementById('runBtn');
-const chatBox = document.getElementById('chatBox');
+const sendBtn = document.getElementById("send-btn");
+const chatMessages = document.getElementById("chat-messages");
+const typingIndicator = document.getElementById("typing-indicator");
+const promptInput = document.getElementById("prompt");
+const apiKeyInput = document.getElementById("api-key");
+const modelSelect = document.getElementById("model");
 
-runBtn.addEventListener('click', async () => {
-    const apiKey = document.getElementById('apiKey').value.trim();
-    const model = document.getElementById('model').value;
-    const userInput = document.getElementById('userInput').value.trim();
-
-    if(!apiKey || !userInput) return alert("Please enter your API key and prompt!");
-
-    appendMessage("You", userInput);
-
-    try {
-        const response = await fetch(`https://openrouter.ai/api/v1/${model}/generate`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({ input: userInput })
-        });
-
-        if(!response.ok) throw new Error("Failed to fetch AI response.");
-
-        const data = await response.json();
-        appendMessage("AI", data.output || "No response received.");
-
-    } catch(err) {
-        appendMessage("Error", err.message);
-    }
-
-    document.getElementById('userInput').value = "";
-});
-
-function appendMessage(sender, text) {
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('message');
-    msgDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
-    chatBox.appendChild(msgDiv);
-    chatBox.scrollTop = chatBox.scrollHeight;
+function appendMessage(message, sender) {
+  const div = document.createElement("div");
+  div.className = sender === "user" ? "message user" : "message bot";
+  div.textContent = message;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 }
+
+async function sendPrompt() {
+  const prompt = promptInput.value.trim();
+  const apiKey = apiKeyInput.value.trim();
+  const model = modelSelect.value;
+
+  if (!prompt || !apiKey) return;
+
+  appendMessage(prompt, "user");
+  promptInput.value = "";
+
+  typingIndicator.style.display = "block";
+
+  try {
+    const response = await fetch("https://your-render-app.onrender.com/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, apiKey, model })
+    });
+    const data = await response.json();
+    appendMessage(data.output || JSON.stringify(data), "bot");
+  } catch (err) {
+    appendMessage("Error: " + err.message, "bot");
+  } finally {
+    typingIndicator.style.display = "none";
+  }
+}
+
+sendBtn.addEventListener("click", sendPrompt);
+promptInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") sendPrompt();
+});
