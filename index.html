@@ -1,32 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DotCloud - AI Anywhere</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DotCloud - AI Anywhere</title>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <h1>DotCloud</h1>
-    <p>Run AI models anywhere, anytime.</p>
-    <a href="tos.html" target="_blank">Terms of Service</a>
-  </header>
+<header>
+<h1>DotCloud</h1>
+<p>Run AI models anywhere, anytime.</p>
+<a href="/tos" target="_blank">Terms of Service</a>
+</header>
+<main>
+<div id="chat-container">
+  <div id="chat-messages"></div>
+  <div id="typing-indicator" style="display:none;">DotCloud is typing...</div>
+  <input type="text" id="api-key" placeholder="Your OpenRouter API key" autocomplete="off"/>
+  <input type="text" id="model" placeholder="Enter model name (e.g. meta-llama/llama-3.3-8b-instruct:free)" autocomplete="off"/>
+  <input type="text" id="prompt" placeholder="Enter your prompt..." autocomplete="off"/>
+  <button id="send-btn">Send</button>
+</div>
+</main>
+<script>
+const sendBtn = document.getElementById("send-btn");
+const chatMessages = document.getElementById("chat-messages");
+const typingIndicator = document.getElementById("typing-indicator");
+const promptInput = document.getElementById("prompt");
+const apiKeyInput = document.getElementById("api-key");
+const modelInput = document.getElementById("model");
 
-  <main>
-    <div id="chat-container">
-      <div id="chat-messages"></div>
-      <div id="typing-indicator" style="display:none;">DotCloud is typing...</div>
-      <input type="text" id="prompt" placeholder="Enter your prompt..." autocomplete="off"/>
-      <input type="text" id="api-key" placeholder="Your OpenRouter API key" autocomplete="off"/>
-      <select id="model">
-        <option value="model-1">Model 1</option>
-        <option value="model-2">Model 2</option>
-      </select>
-      <button id="send-btn">Send</button>
-    </div>
-  </main>
+function appendMessage(message, sender) {
+  const div = document.createElement("div");
+  div.className = sender==="user"?"message user":"message bot";
+  div.textContent = message;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
-  <script src="app.js"></script>
+async function sendPrompt() {
+  const prompt = promptInput.value.trim();
+  const apiKey = apiKeyInput.value.trim();
+  const model = modelInput.value.trim();
+  if(!prompt || !apiKey || !model) return;
+  
+  appendMessage(prompt,"user");
+  promptInput.value="";
+  typingIndicator.style.display="block";
+
+  try {
+    const response = await fetch("/api/run",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt, apiKey, model})
+    });
+    const data = await response.json();
+    appendMessage(data.output||JSON.stringify(data),"bot");
+  } catch(err) {
+    appendMessage("Error: "+err.message,"bot");
+  } finally { typingIndicator.style.display="none"; }
+}
+
+sendBtn.addEventListener("click",sendPrompt);
+promptInput.addEventListener("keydown", e => { if(e.key==="Enter") sendPrompt(); });
+</script>
 </body>
 </html>
