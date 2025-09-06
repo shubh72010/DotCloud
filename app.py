@@ -13,15 +13,24 @@ HTML = """
 <title>DotCloud AI</title>
 <style>
 body { font-family: Arial, sans-serif; margin: 20px; }
-input, textarea { width: 100%; margin: 5px 0; padding: 8px; }
+input, textarea, select { width: 100%; margin: 5px 0; padding: 8px; }
 button { padding: 10px 20px; margin: 5px 0; cursor: pointer; }
-pre { background: #f4f4f4; padding: 10px; }
+pre { background: #f4f4f4; padding: 10px; white-space: pre-wrap; word-wrap: break-word; }
 </style>
 </head>
 <body>
 <h1>DotCloud AI</h1>
+
 <div>
-    <input type="text" id="apiKey" placeholder="Enter your OpenRouter API key">
+    <label>Provider:</label>
+    <select id="provider">
+        <option value="openrouter">OpenRouter</option>
+        <option value="groq">Groq</option>
+    </select>
+</div>
+
+<div>
+    <input type="text" id="apiKey" placeholder="Enter your API key">
 </div>
 <div>
     <input type="text" id="model" placeholder="Enter model (e.g., meta-llama/llama-3.3-8b-instruct:free)">
@@ -39,6 +48,7 @@ const sendBtn = document.getElementById('sendBtn');
 const responseBox = document.getElementById('response');
 
 sendBtn.addEventListener('click', async () => {
+    const provider = document.getElementById('provider').value;
     const prompt = document.getElementById('prompt').value;
     const model = document.getElementById('model').value;
     const apiKey = document.getElementById('apiKey').value;
@@ -54,7 +64,7 @@ sendBtn.addEventListener('click', async () => {
         const res = await fetch('/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model, apiKey })
+            body: JSON.stringify({ provider, prompt, model, apiKey })
         });
 
         const data = await res.json();
@@ -62,8 +72,16 @@ sendBtn.addEventListener('click', async () => {
         if (data.error) {
             responseBox.textContent = "Error: " + data.error;
         } else {
-            const message = data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
-            responseBox.textContent = message;
+            // Normalize response across providers
+            let message = "";
+            if (data.choices && data.choices[0]) {
+                if (data.choices[0].message) {
+                    message = data.choices[0].message.content;
+                } else if (data.choices[0].text) {
+                    message = data.choices[0].text;
+                }
+            }
+            responseBox.textContent = message || JSON.stringify(data, null, 2);
         }
     } catch (err) {
         responseBox.textContent = "Error: " + err.message;
@@ -81,6 +99,7 @@ def index():
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.get_json()
+    provider = data.get('provider', 'openrouter')
     prompt = data.get('prompt')
     model = data.get('model')
     api_key = data.get('apiKey')
@@ -88,20 +107,36 @@ def generate():
     if not prompt or not model or not api_key:
         return jsonify({"error": "Missing prompt, model, or API key"}), 400
 
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}]
-    }
-
     try:
+        if provider == "openrouter":
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+
+        elif provider == "groq":
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+
+        else:
+            return jsonify({"error": "Unsupported provider"}), 400
+
         resp = requests.post(url, headers=headers, json=body, timeout=30)
         resp.raise_for_status()
         return jsonify(resp.json())
+
     except requests.exceptions.RequestException as e:
         return jsonify({"error": str(e)}), 500
 
